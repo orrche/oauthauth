@@ -262,18 +262,6 @@ func menu(w http.ResponseWriter, r *http.Request, state *State) *sessions.Sessio
 
 }
 
-/*
-func GetUser(state *State, id string) *User {
-	for _, user := range state.Users {
-		if user.ID == id {
-			return user
-		}
-	}
-
-	return nil
-}
-*/
-
 func GetUserFromSession(state *State, session *sessions.Session) *User {
 	if session.Values["userid"] != nil {
 		for _, user := range state.Users {
@@ -320,14 +308,14 @@ func (state *State) getGroups(w http.ResponseWriter, r *http.Request) {
 
 	if r.FormValue("user") == user.ID {
 		data, err := json.Marshal(user.Groups)
-		if err != nil {
-			w.Write(data)
-		}
+		failOnErr(err, w, r)
+
+		w.Write(data)
 	} else if !user.IsMemberOf("admin") {
 		data, err := json.Marshal(state.GetUserFromId(r.FormValue("user")).Groups)
-		if err != nil {
-			w.Write(data)
-		}
+		failOnErr(err, w, r)
+
+		w.Write(data)
 	}
 }
 
@@ -491,6 +479,7 @@ func main() {
 	r.HandleFunc("/token", state.token)
 	r.HandleFunc("/gettoken", state.getToken)
 	r.HandleFunc("/gettokeninfo", getTokenInfo)
+	r.HandleFunc("/getgroups", state.getGroups)
 	r.HandleFunc("/info", state.info)
 	r.HandleFunc("/createinvite", state.createInvite)
 	r.HandleFunc("/listinvites", state.listPendingInvites)
