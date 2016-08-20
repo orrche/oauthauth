@@ -305,8 +305,8 @@ func (state *State) getGroups(w http.ResponseWriter, r *http.Request) {
 	failOnErr(err, w, r)
 
 	user := GetUserFromSession(state, session)
-
-	if r.FormValue("user") == user.ID {
+	log.Print("pop")
+	if r.FormValue("user") == "" || r.FormValue("user") == user.ID {
 		data, err := json.Marshal(user.Groups)
 		failOnErr(err, w, r)
 
