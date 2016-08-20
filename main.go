@@ -248,7 +248,7 @@ func menu(w http.ResponseWriter, r *http.Request, state *State) *sessions.Sessio
 	fmt.Fprintf(w, "<a href='/login'>Login</a> ")
 	fmt.Fprintf(w, "<a href='/info'>Info</a> ")
 	fmt.Fprintf(w, "<a href='/gettoken'>GetToken</a> ")
-	if user.IsMemberOf("admin") {
+	if user != nil && user.IsMemberOf("admin") {
 		fmt.Fprintf(w, "<a href='/listinvites'>ListInvites</a> ")
 	}
 	fmt.Fprintf(w, "<a href='/createinvite'>CreateInvite</a> ")
