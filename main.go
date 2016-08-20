@@ -300,12 +300,24 @@ func (state *State) GetUserFromId(id string) *User {
 	return nil
 }
 
+func (state *State) getUsers(w http.ResponseWriter, r *http.Request) {
+	session, err := cookiestore.Get(r, "session-name")
+	failOnErr(err, w, r)
+
+	user := GetUserFromSession(state, session)
+
+	if user.IsMemberOf("admin") {
+		data, err := json.Marshal(state.Users)
+		failOnErr(err, w, r)
+		w.Write(data)
+	}
+}
+
 func (state *State) getGroups(w http.ResponseWriter, r *http.Request) {
 	session, err := cookiestore.Get(r, "session-name")
 	failOnErr(err, w, r)
 
 	user := GetUserFromSession(state, session)
-	log.Print("pop")
 	if r.FormValue("user") == "" || r.FormValue("user") == user.ID {
 		data, err := json.Marshal(user.Groups)
 		failOnErr(err, w, r)
@@ -480,6 +492,7 @@ func main() {
 	r.HandleFunc("/gettoken", state.getToken)
 	r.HandleFunc("/gettokeninfo", getTokenInfo)
 	r.HandleFunc("/getgroups", state.getGroups)
+	r.HandleFunc("/getusers", state.getUsers)
 	r.HandleFunc("/info", state.info)
 	r.HandleFunc("/createinvite", state.createInvite)
 	r.HandleFunc("/listinvites", state.listPendingInvites)
