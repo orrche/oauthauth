@@ -1,0 +1,16 @@
+{{define "content"}}
+Hello {{.User.ID}} <br/>
+[
+{{ range $gi, $group := .User.Groups}}
+	"{{$group}}", 
+{{ end }}
+]
+
+<ul>
+	{{range $ti, $token := .Tokens}}
+		{{ if $token }}
+			<li>{{$token}}</li>
+		{{ end }}
+	{{end}}
+</ul>
+{{end}}

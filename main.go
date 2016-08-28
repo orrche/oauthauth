@@ -1,5 +1,7 @@
 package main
 
+//go:generate go-bindata template
+
 import (
 	"encoding/base64"
 	"encoding/json"
@@ -10,6 +12,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/arschles/go-bindata-html-template"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -116,6 +120,10 @@ func (state *State) GetUserFromGplusID(gpid string) *User {
 	}
 
 	return nil
+}
+
+func readTemplateFile(filename string) *template.Template {
+	return template.Must(template.New("base", Asset).ParseFiles("template/base.html", filename))
 }
 
 func (state *State) token(w http.ResponseWriter, r *http.Request) {
@@ -242,22 +250,16 @@ func (token *Token) Valid() bool {
 
 func menu(w http.ResponseWriter, r *http.Request, state *State) *sessions.Session {
 	session, err := cookiestore.Get(r, "session-name")
-	user := GetUserFromSession(state, session)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-	fmt.Fprintf(w, "<a href='/login'>Login</a> ")
-	fmt.Fprintf(w, "<a href='/info'>Info</a> ")
-	fmt.Fprintf(w, "<a href='/gettoken'>GetToken</a> ")
-	if user != nil && user.IsMemberOf("admin") {
-		fmt.Fprintf(w, "<a href='/listinvites'>ListInvites</a> ")
-	}
-	fmt.Fprintf(w, "<a href='/createinvite'>CreateInvite</a> ")
-	fmt.Fprintf(w, "<br/>")
 
 	if err != nil {
 		return nil
 	}
-
+	/*
+		data, err := Asset("data/menu.html")
+		failOnErr(err, w, r)
+		w.Write(data)
+	*/
 	return session
 
 }
@@ -275,20 +277,25 @@ func GetUserFromSession(state *State, session *sessions.Session) *User {
 
 func (state *State) info(w http.ResponseWriter, r *http.Request) {
 	session := menu(w, r, state)
-	user := GetUserFromSession(state, session)
 
-	if user != nil {
-		fmt.Fprintf(w, "Userid: %s<br/>\n", user.ID)
-		for _, group := range user.Groups {
-			fmt.Fprintf(w, "<li>%s</li>", group)
-		}
+	type Info struct {
+		User   *User
+		Title  string
+		Tokens []*Token
 	}
 
-	for _, t := range tokens {
-		if t.Valid() && t.User == session.Values["userid"].(string) {
-			fmt.Fprintf(w, "<li>%v</li>", t)
+	info := Info{GetUserFromSession(state, session), "something", tokens}
+
+	tmpl := readTemplateFile("template/info.html")
+	err := tmpl.Execute(w, info)
+	failOnErr(err, w, r)
+	/*
+		for _, t := range tokens {
+			if t.Valid() && t.User == session.Values["userid"].(string) {
+				fmt.Fprintf(w, "<li>%v</li>", t)
+			}
 		}
-	}
+	*/
 }
 
 func (state *State) GetUserFromId(id string) *User {
@@ -498,6 +505,7 @@ func main() {
 	r.HandleFunc("/listinvites", state.listPendingInvites)
 	r.HandleFunc("/", state.info)
 
+	log.Print("Server started")
 	err := http.ListenAndServe(":8080", nil)
 
 	if err != nil {
