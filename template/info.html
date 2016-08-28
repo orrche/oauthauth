@@ -6,10 +6,15 @@ Hello {{.User.ID}} <br/>
 {{ end }}
 ]
 
+{{ $user := .User }}
 <ul>
 	{{range $ti, $token := .Tokens}}
 		{{ if $token }}
-			<li>{{$token}}</li>
+			{{ if $token.Valid }}
+				{{ if eq $token.User $user.ID}}
+					<li>{{$token}}</li>
+				{{ end }}
+			{{ end }}
 		{{ end }}
 	{{end}}
 </ul>
