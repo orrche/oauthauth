@@ -1,6 +1,7 @@
 package main
 
 //go:generate go-bindata template
+//go:generate go-bindata-assetfs static/...
 
 import (
 	"encoding/base64"
@@ -491,6 +492,7 @@ func main() {
 
 	r := mux.NewRouter()
 
+	StaticFS(r)
 	http.Handle("/", r)
 
 	r.HandleFunc("/invite", state.invite)
@@ -503,7 +505,7 @@ func main() {
 	r.HandleFunc("/info", state.info)
 	r.HandleFunc("/createinvite", state.createInvite)
 	r.HandleFunc("/listinvites", state.listPendingInvites)
-	r.HandleFunc("/", state.info)
+	// r.HandleFunc("/", state.info)
 
 	log.Print("Server started")
 	err := http.ListenAndServe(":8080", nil)
