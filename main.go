@@ -1,7 +1,7 @@
 package main
 
-//go:generate go-bindata template
-//go:generate go-bindata-assetfs static/...
+//go:generate go-bindata-assetfs static/... template
+// # // go:generate go-bindata template
 
 import (
 	"encoding/base64"
@@ -10,6 +10,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -62,27 +63,21 @@ type User struct {
 }
 
 func (state *State) login(w http.ResponseWriter, r *http.Request) {
-	menu(w, r, state)
+	type Info struct {
+		GoogleLink string
+		Title      string
+	}
 
-	url := oauthconf.AuthCodeURL("state")
-	log.Print(url)
-	fmt.Fprintf(w, "Login in using google<br/>\n")
-	fmt.Fprintf(w, "<a href='%s'>Google</a><br/>", url)
+	info := Info{oauthconf.AuthCodeURL("state"), "Login"}
+
+	tmpl := readTemplateFile("template/login.html")
+	err := tmpl.Execute(w, info)
+	failOnErr(err, w, r)
 }
 
-// decodeIdToken takes an ID Token and decodes it to fetch the Google+ ID within
 func decodeIdToken(idToken string) (gplusID string, err error) {
-	// An ID token is a cryptographically-signed JSON object encoded in base 64.
-	// Normally, it is critical that you validate an ID token before you use it,
-	// but since you are communicating directly with Google over an
-	// intermediary-free HTTPS channel and using your Client Secret to
-	// authenticate yourself to Google, you can be confident that the token you
-	// receive really comes from Google and is valid. If your server passes the ID
-	// token to other components of your app, it is extremely important that the
-	// other components validate the token before using it.
 	var set ClaimSet
 	if idToken != "" {
-		// Check that the padding is correct for a base64decode
 		parts := strings.Split(idToken, ".")
 		if len(parts) < 2 {
 			return "", fmt.Errorf("Malformed ID token")
@@ -101,7 +96,6 @@ func decodeIdToken(idToken string) (gplusID string, err error) {
 }
 
 func base64Decode(s string) ([]byte, error) {
-	// add back missing padding
 	switch len(s) % 4 {
 	case 2:
 		s += "=="
@@ -213,7 +207,8 @@ func failOnErr(err error, w http.ResponseWriter, r *http.Request) {
 }
 
 func (state *State) getToken(w http.ResponseWriter, r *http.Request) {
-	session := menu(w, r, state)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	session, _ := cookiestore.Get(r, "session-name")
 
 	user := GetUserFromSession(state, session)
 
@@ -225,7 +220,41 @@ func (state *State) getToken(w http.ResponseWriter, r *http.Request) {
 	t := genereateToken()
 	t.User = user.ID
 
-	fmt.Fprintf(w, "<a href='/gettokeninfo?token=%s'>Info</a>", t.ID)
+	u, err := url.Parse(r.FormValue("returl"))
+	log.Print(u)
+	failOnErr(err, w, r)
+	q := u.Query()
+	q.Set("token", t.ID)
+	u.RawQuery = q.Encode()
+	log.Print(u)
+
+	http.Redirect(w, r, u.String(), 302)
+}
+
+func (state *State) getGroupsFromToken(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	tokenId := r.FormValue("token")
+
+	for _, t := range tokens {
+		if t.Valid() && tokenId == t.ID {
+			user := state.GetUserFromId(t.User)
+			if r.FormValue("user") == "" || r.FormValue("user") == user.ID {
+				type Info struct {
+					Groups []string
+				}
+				info := Info{user.Groups}
+
+				enc := toml.NewEncoder(w)
+				enc.Encode(info)
+			} else if !user.IsMemberOf("admin") {
+				data, err := json.Marshal(state.GetUserFromId(r.FormValue("user")).Groups)
+				failOnErr(err, w, r)
+
+				w.Write(data)
+			}
+			return
+		}
+	}
 }
 
 func getTokenInfo(w http.ResponseWriter, r *http.Request) {
@@ -249,22 +278,6 @@ func (token *Token) Valid() bool {
 	return token != nil && token.Time.After(time.Now())
 }
 
-func menu(w http.ResponseWriter, r *http.Request, state *State) *sessions.Session {
-	session, err := cookiestore.Get(r, "session-name")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-	if err != nil {
-		return nil
-	}
-	/*
-		data, err := Asset("data/menu.html")
-		failOnErr(err, w, r)
-		w.Write(data)
-	*/
-	return session
-
-}
-
 func GetUserFromSession(state *State, session *sessions.Session) *User {
 	if session.Values["userid"] != nil {
 		for _, user := range state.Users {
@@ -277,7 +290,7 @@ func GetUserFromSession(state *State, session *sessions.Session) *User {
 }
 
 func (state *State) info(w http.ResponseWriter, r *http.Request) {
-	session := menu(w, r, state)
+	session, _ := cookiestore.Get(r, "session-name")
 
 	type Info struct {
 		User   *User
@@ -285,18 +298,15 @@ func (state *State) info(w http.ResponseWriter, r *http.Request) {
 		Tokens []*Token
 	}
 
-	info := Info{GetUserFromSession(state, session), "something", tokens}
+	info := Info{GetUserFromSession(state, session), "Info", tokens}
 
-	tmpl := readTemplateFile("template/info.html")
-	err := tmpl.Execute(w, info)
-	failOnErr(err, w, r)
-	/*
-		for _, t := range tokens {
-			if t.Valid() && t.User == session.Values["userid"].(string) {
-				fmt.Fprintf(w, "<li>%v</li>", t)
-			}
-		}
-	*/
+	if info.User == nil {
+		http.Redirect(w, r, "/login", 302)
+	} else {
+		tmpl := readTemplateFile("template/info.html")
+		err := tmpl.Execute(w, info)
+		failOnErr(err, w, r)
+	}
 }
 
 func (state *State) GetUserFromId(id string) *User {
@@ -364,14 +374,16 @@ func (state *State) createInvite(w http.ResponseWriter, r *http.Request) {
 
 		fmt.Fprintf(w, "Visite http://auth.kent.wr25.org/invite?token=%s to get a user", token.ID)
 	} else {
-		menu(w, r, state)
-		fmt.Fprintf(w, "<form method='post'>")
-		fmt.Fprintf(w, "Friendly Name: <input type='text' name='name'/><br/>")
-		for _, group := range []string{"admin"} {
-			fmt.Fprintf(w, "<input type='checkbox' value='%s'></input> %s<br/>", group, group)
+		type Info struct {
+			Groups []string
+			Title  string
 		}
-		fmt.Fprintf(w, "<input type='submit'/><br/>")
-		fmt.Fprintf(w, "</form>")
+
+		info := Info{[]string{"admin"}, "Create Invite"}
+
+		tmpl := readTemplateFile("template/createinvite.html")
+		err := tmpl.Execute(w, info)
+		failOnErr(err, w, r)
 	}
 }
 
@@ -386,7 +398,7 @@ func (user User) IsMemberOf(group string) bool {
 }
 
 func (state *State) listPendingInvites(w http.ResponseWriter, r *http.Request) {
-	session := menu(w, r, state)
+	session, _ := cookiestore.Get(r, "session-name")
 	user := GetUserFromSession(state, session)
 
 	if !user.IsMemberOf("admin") {
@@ -500,12 +512,13 @@ func main() {
 	r.HandleFunc("/token", state.token)
 	r.HandleFunc("/gettoken", state.getToken)
 	r.HandleFunc("/gettokeninfo", getTokenInfo)
+	r.HandleFunc("/getgroupsfromtoken", state.getGroupsFromToken)
 	r.HandleFunc("/getgroups", state.getGroups)
 	r.HandleFunc("/getusers", state.getUsers)
 	r.HandleFunc("/info", state.info)
 	r.HandleFunc("/createinvite", state.createInvite)
 	r.HandleFunc("/listinvites", state.listPendingInvites)
-	// r.HandleFunc("/", state.info)
+	r.HandleFunc("/", state.info)
 
 	log.Print("Server started")
 	err := http.ListenAndServe(":8080", nil)

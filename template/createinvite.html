@@ -1,0 +1,9 @@
+{{define "content"}}
+<form method="post">
+	Friendly name: <input name="name"></input><br/>
+	{{ range $gi, $group := .Groups}}
+		<input type="checkbox" naeme="group_{{$group}}"> {{$group}}<br />
+	{{ end }}
+	<input type="submit"/>	
+</form>
+{{end}}

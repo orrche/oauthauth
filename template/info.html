@@ -1,21 +1,47 @@
 {{define "content"}}
-Hello {{.User.ID}} <br/>
-[
-{{ range $gi, $group := .User.Groups}}
-	"{{$group}}", 
-{{ end }}
-]
-
 {{ $user := .User }}
-<ul>
+<ul class="menu">
+	<li><a href="">API</a>
+		<ul>
+			<li><a href='/gettoken?returl=/info'>GetToken</a></li>
+			<li><a href='/getgroups'>GetGroups</a></li>
+		</ul>
+	</li>
+	<li><a href="">Admin</a>
+		<ul>
+			<li><a href='/listinvites'>ListInvites</a></li>
+			<li><a href='/getusers'>ListUsers</a></li>
+			<li><a href='/createinvite'>CreateInvite</a></li>
+		</ul>
+	</li>
+</ul>
+
+Hello {{$user.ID}} <br/>
+
+<table class="striped tight sortable">
+	<thead><tr><th>Group</th></tr></thead>
+	<tbody>
+		{{ range $gi, $group := .User.Groups}}
+			<tr><td>{{$group}}</td></tr>
+		{{ end }}
+	</tbody>
+</table>
+
+
+<table class="striped tight sortable">
+	<thead><tr><th>Token ID</th><th>Expires</th></tr></thead>
+	<tbody>
 	{{range $ti, $token := .Tokens}}
 		{{ if $token }}
 			{{ if $token.Valid }}
 				{{ if eq $token.User $user.ID}}
-					<li>{{$token}}</li>
+				<tr><td>{{$token.ID}}(<a href="/gettokeninfo?token={{$token.ID}}">info</a>, <a href="/getgroupsfromtoken?token={{$token.ID}}">groups</a>)</td><td>{{$token.Time}}</td></tr>
 				{{ end }}
 			{{ end }}
 		{{ end }}
 	{{end}}
-</ul>
+	</tbody>
+</table>
+
+
 {{end}}
