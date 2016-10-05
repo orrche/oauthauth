@@ -28,6 +28,26 @@ import (
 var oauthconf *oauth2.Config
 var cookiestore *sessions.CookieStore
 
+type Action interface {
+	Act(w http.ResponseWriter, r *http.Request)
+}
+
+type RedirectAction struct {
+	URL string
+}
+
+func (ra RedirectAction) Act(w http.ResponseWriter, r *http.Request) {
+	log.Printf("URL: %s", ra.URL)
+	http.Redirect(w, ra.URL, 303)
+}
+
+type actionHolder struct {
+	action Action
+	state  string
+}
+
+var actions [50]actionHolder
+
 type Config struct {
 	ClientID     string
 	ClientSecret string
@@ -68,7 +88,19 @@ func (state *State) login(w http.ResponseWriter, r *http.Request) {
 		Title      string
 	}
 
-	info := Info{oauthconf.AuthCodeURL("state"), "Login"}
+	ta := new(RedirectAction)
+	ta.URL = "/info"
+	atoken := RandStringRunes(30)
+
+	for i, a := range actions {
+		if a.action == nil {
+			actions[i].action = ta
+			actions[i].state = atoken
+			break
+		}
+	}
+
+	info := Info{oauthconf.AuthCodeURL(atoken), "Login"}
 
 	tmpl := readTemplateFile("template/login.html")
 	err := tmpl.Execute(w, info)
@@ -148,6 +180,15 @@ func (state *State) token(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Id: %s\n", user.ID)
 		} else {
 			log.Printf("Unknown user: %s\n", gplusID)
+		}
+	}
+
+	stateToken := r.FormValue("state")
+	for _, action := range actions {
+		if action.state == stateToken {
+			action.action.Act(w, r)
+			action.action = nil
+			return
 		}
 	}
 
