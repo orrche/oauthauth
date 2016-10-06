@@ -38,7 +38,7 @@ type RedirectAction struct {
 
 func (ra RedirectAction) Act(w http.ResponseWriter, r *http.Request) {
 	log.Printf("URL: %s", ra.URL)
-	http.Redirect(w, ra.URL, 303)
+	http.Redirect(w, r, ra.URL, 302)
 }
 
 type actionHolder struct {
@@ -82,12 +82,7 @@ type User struct {
 	Groups   []string
 }
 
-func (state *State) login(w http.ResponseWriter, r *http.Request) {
-	type Info struct {
-		GoogleLink string
-		Title      string
-	}
-
+func (state *State) googleLogin(w http.ResponseWriter, r *http.Request) {
 	ta := new(RedirectAction)
 	ta.URL = "/info"
 	atoken := RandStringRunes(30)
@@ -100,7 +95,15 @@ func (state *State) login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	info := Info{oauthconf.AuthCodeURL(atoken), "Login"}
+	http.Redirect(w, r, oauthconf.AuthCodeURL(atoken), 302)
+}
+
+func (state *State) login(w http.ResponseWriter, r *http.Request) {
+	type Info struct {
+		Title string
+	}
+
+	info := Info{"Login"}
 
 	tmpl := readTemplateFile("template/login.html")
 	err := tmpl.Execute(w, info)
@@ -550,6 +553,7 @@ func main() {
 
 	r.HandleFunc("/invite", state.invite)
 	r.HandleFunc("/login", state.login)
+	r.HandleFunc("/googlelogin", state.googleLogin)
 	r.HandleFunc("/token", state.token)
 	r.HandleFunc("/gettoken", state.getToken)
 	r.HandleFunc("/gettokeninfo", getTokenInfo)
