@@ -32,6 +32,15 @@ type Action interface {
 	Act(w http.ResponseWriter, r *http.Request)
 }
 
+type GetTokenAction struct {
+	URL   string
+	state *State
+}
+
+func (gta GetTokenAction) Act(w http.ResponseWriter, r *http.Request) {
+	gta.state.actionGetToken(w, r, gta.URL)
+}
+
 type RedirectAction struct {
 	URL string
 }
@@ -82,28 +91,44 @@ type User struct {
 	Groups   []string
 }
 
-func (state *State) googleLogin(w http.ResponseWriter, r *http.Request) {
-	ta := new(RedirectAction)
-	ta.URL = "/info"
+func AddAction(action Action) actionHolder {
 	atoken := RandStringRunes(30)
 
 	for i, a := range actions {
 		if a.action == nil {
-			actions[i].action = ta
+			actions[i].action = action
 			actions[i].state = atoken
-			break
+
+			return actions[i]
 		}
 	}
+	return actionHolder{nil, ""}
+}
 
-	http.Redirect(w, r, oauthconf.AuthCodeURL(atoken), 302)
+func (state *State) googleLogin(w http.ResponseWriter, r *http.Request) {
+	statetoken := ""
+
+	if r.FormValue("action") == "" {
+		ta := new(RedirectAction)
+		if r.FormValue("returl") == "" {
+			ta.URL = "/info"
+		} else {
+			ta.URL = r.FormValue("returl")
+		}
+		ah := AddAction(ta)
+		statetoken = ah.state
+	}
+
+	http.Redirect(w, r, oauthconf.AuthCodeURL(statetoken), 302)
 }
 
 func (state *State) login(w http.ResponseWriter, r *http.Request) {
 	type Info struct {
-		Title string
+		Title  string
+		Action string
 	}
 
-	info := Info{"Login"}
+	info := Info{"Login", r.FormValue("Action")}
 
 	tmpl := readTemplateFile("template/login.html")
 	err := tmpl.Execute(w, info)
@@ -250,21 +275,27 @@ func failOnErr(err error, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (state *State) getToken(w http.ResponseWriter, r *http.Request) {
+func (state *State) actionGetToken(w http.ResponseWriter, r *http.Request, returl string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	session, _ := cookiestore.Get(r, "session-name")
 
 	user := GetUserFromSession(state, session)
 
+	gta := new(GetTokenAction)
+	gta.state = state
+	gta.URL = returl
+
+	act := AddAction(gta)
 	if user == nil {
-		http.Redirect(w, r, "/login", 303)
+		url := fmt.Sprintf("/login?Action=%s", act.state)
+		http.Redirect(w, r, url, 303)
 		return
 	}
 
 	t := genereateToken()
 	t.User = user.ID
 
-	u, err := url.Parse(r.FormValue("returl"))
+	u, err := url.Parse(returl)
 	log.Print(u)
 	failOnErr(err, w, r)
 	q := u.Query()
@@ -273,6 +304,10 @@ func (state *State) getToken(w http.ResponseWriter, r *http.Request) {
 	log.Print(u)
 
 	http.Redirect(w, r, u.String(), 302)
+}
+
+func (state *State) getToken(w http.ResponseWriter, r *http.Request) {
+	state.actionGetToken(w, r, r.FormValue("returl"))
 }
 
 func (state *State) getGroupsFromToken(w http.ResponseWriter, r *http.Request) {
