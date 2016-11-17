@@ -60,7 +60,10 @@ var actions [50]actionHolder
 type Config struct {
 	ClientID     string
 	ClientSecret string
+	URL          string
 }
+
+var config Config
 
 type State struct {
 	Users             []*User
@@ -451,7 +454,7 @@ func (state *State) createInvite(w http.ResponseWriter, r *http.Request) {
 
 		inviteTokens = append(inviteTokens, token)
 
-		fmt.Fprintf(w, "Visite http://auth.kent.wr25.org/invite?token=%s to get a user", token.ID)
+		fmt.Fprintf(w, "Visite %s/invite?token=%s to get a user", config.URL, token.ID)
 	} else {
 		type Info struct {
 			Groups []string
@@ -540,7 +543,6 @@ func main() {
 	init_rand()
 	tokens = make([]*Token, 50)
 
-	var config Config
 	if _, err := toml.DecodeFile("/opt/oauthauth/config.toml", &config); err != nil {
 		log.Fatal(err)
 	}
@@ -567,14 +569,14 @@ func main() {
 
 		inviteTokens = append(inviteTokens, token)
 
-		log.Printf("Visite http://auth.kent.wr25.org/invite?token=%s to get admin", token.ID)
+		log.Printf("Visite %s/invite?token=%s to get admin", config.URL, token.ID)
 	}
 
 	cookiestore = sessions.NewCookieStore([]byte(state.CookieStoreSecret))
 	oauthconf = &oauth2.Config{
 		ClientID:     config.ClientID,
 		ClientSecret: config.ClientSecret,
-		RedirectURL:  "http://auth.kent.wr25.org/token",
+		RedirectURL:  config.URL + "/token",
 		Scopes: []string{
 			"https://www.googleapis.com/auth/plus.login",
 		},
